@@ -1,0 +1,37 @@
+{
+  local_certs
+  auto_https disable_redirects
+}
+
+m1server.fritz.box, m1server.local, 192.168.178.50 {
+  tls internal
+
+  route /akito* {
+    uri strip_prefix /akito
+    reverse_proxy 192.168.178.50:8081
+  }
+
+  route /outdoor* {
+    uri strip_prefix /outdoor
+    reverse_proxy 192.168.178.50:8082
+  }
+
+  reverse_proxy app:8080
+}
+
+:80 {
+  route /radai* {
+    root * /
+    file_server
+  }
+  route /caddy-root.crt {
+    header Content-Type application/x-x509-ca-cert
+    header Content-Disposition "attachment; filename=caddy-root.crt"
+    root * /data/caddy/pki/authorities/local
+    rewrite * /root.crt
+    file_server
+  }
+  route {
+    redir https://{host}{uri} 308
+  }
+}

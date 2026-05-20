@@ -1,0 +1,12 @@
+data/
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+frontend/node_modules/
+frontend/dist/
+backend/static/assets/
+backend/static/workbox-*.js
+backend/static/registerSW.js
+backend/static/sw.js.bak
+*.log
