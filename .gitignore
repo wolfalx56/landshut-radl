@@ -10,3 +10,12 @@ backend/static/workbox-*.js
 backend/static/registerSW.js
 backend/static/sw.js.bak
 *.log
+
+# Große Karten-Binärdateien — per `pmtiles extract` neu erzeugbar, nicht ins Repo
+*.pmtiles
+
+# Backup-Dateien
+*.bak
+*.backup
+*.bak-*
+*.backup-*

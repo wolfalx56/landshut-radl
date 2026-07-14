@@ -1,6 +1,8 @@
 <script>
   import { onMount, onDestroy, createEventDispatcher } from 'svelte'
   import maplibregl from 'maplibre-gl'
+  import 'maplibre-gl/dist/maplibre-gl.css'
+import * as pmtiles from 'pmtiles'
   import { fetchPOIs } from '../lib/api.js'
 
   export let userPos = null
@@ -13,7 +15,7 @@
   const dispatch = createEventDispatcher()
 
   const LANDSHUT = [12.1525, 48.5369]
-  const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+  const MAP_STYLE = '/maps/protomaps-light-style.json'
 
   let mapContainer
   let map
@@ -30,20 +32,52 @@
   }
 
   onMount(() => {
-    map = new maplibregl.Map({
-      container: mapContainer,
-      style: MAP_STYLE,
-      center: LANDSHUT,
-      zoom: 11,
-    })
+    function initMap() {
+      if (!mapContainer || mapContainer.clientHeight === 0) {
+        requestAnimationFrame(initMap)
+        return
+      }
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
-    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right')
+      const protocol = new pmtiles.Protocol()
+      maplibregl.addProtocol('pmtiles', protocol.tile)
 
-    map.on('load', () => {
-      addRouteLayer()
-      initPOILayer()
-    })
+      map = new maplibregl.Map({
+        container: mapContainer,
+        style: MAP_STYLE,
+        center: LANDSHUT,
+        zoom: 11,
+      })
+
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+      map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right')
+
+      map.on('load', () => {
+        map.resize()
+        addRouteLayer()
+        initPOILayer()
+      })
+
+      map.on('error', (e) => {
+        const err = e && e.error ? e.error : {}
+        const msg = err.message || String(err)
+        const url = err.url || (e && e.source && e.source.url) || (e && e.sourceId) || 'keine URL'
+        const status = err.status || (err.response && err.response.status) || ''
+        const box = document.getElementById('debugbox')
+        if (box) {
+          box.style.display = 'block'
+          box.textContent = 'ERROR: ' + msg + ' | STATUS: ' + status + ' | URL: ' + url + '\n' + (box.textContent || '')
+        }
+        console.error('MAP ERROR:', e)
+      })
+      setTimeout(() => map.resize(), 300)
+      window.addEventListener('resize', () => map.resize())
+      window.addEventListener('orientationchange', () => setTimeout(() => map.resize(), 300))
+
+      const ro = new ResizeObserver(() => map.resize())
+      ro.observe(mapContainer)
+    }
+
+    initMap()
   })
 
   onDestroy(() => map?.remove())
@@ -105,13 +139,12 @@
     // Mittelpunkt der Route berechnen, Radius = halbe Routenlänge (max 15km)
     const coords = tour.geometry.coordinates
     const mid = coords[Math.floor(coords.length / 2)]
-    const radiusM = Math.min(tour.distance_km * 400, 15000)
+    const radiusM = Math.round(Math.min(tour.distance_km * 400, 15000))
     try {
       const data = await fetchPOIs(mid[1], mid[0], radiusM)
       renderPOIs(data.pois)
-    } catch {}
+      } catch (e) { console.error('POI-Ladefehler:', e) } 
   }
-
   function clearPOIs() {
     if (map.getSource('pois')) {
       map.getSource('pois').setData({ type: 'FeatureCollection', features: [] })
@@ -204,6 +237,7 @@
 </script>
 
 <div bind:this={mapContainer} class="map"></div>
+<div id="debugbox" style="display:none; position:fixed; top:60px; left:8px; right:8px; z-index:9999; background:rgba(0,0,0,0.85); color:#0f0; font:11px monospace; padding:8px; max-height:40vh; overflow:auto; white-space:pre-wrap; border-radius:8px;"></div>
 
 <!-- GPS-Button -->
 <button class="btn-gps" on:click={() => dispatch('locateMe')} title="Mein Standort">

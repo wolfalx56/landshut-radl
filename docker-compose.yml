@@ -11,6 +11,19 @@ services:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
 
+  travel:
+    image: python:3.12-slim
+    working_dir: /home/alex/travel
+    command: >
+      sh -c "pip install fastapi uvicorn --quiet && python3 trip_server.py"
+    ports:
+      - "8095:8095"
+    volumes:
+      - /home/alex/travel:/home/alex/travel
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
   caddy:
     image: caddy:2-alpine
     ports:
@@ -21,8 +34,10 @@ services:
       - caddy_data:/data
       - caddy_config:/config
       - /home/alex/.openclaw/workspace/radai:/radai:ro
+      - /home/alex/landshut-radl/frontend/public/maps:/maps:ro
     depends_on:
       - app
+      - travel
     restart: unless-stopped
 
 volumes:

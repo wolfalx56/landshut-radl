@@ -2,13 +2,21 @@ import httpx
 import math
 import random
 from typing import Any
+import json
+import aiosqlite
+from pathlib import Path
 
 # Landshut Zentrum als Fallback-Startpunkt
 LANDSHUT_LAT = 48.5369
 LANDSHUT_LON = 12.1525
 
 # Overpass: Interessante Ziele im Umkreis finden
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
 OVERPASS_HEADERS = {
     "User-Agent": "LandshutRadl/1.0 (contact: wolfalx@gmx.de)",
     "Content-Type": "application/x-www-form-urlencoded",
@@ -21,9 +29,35 @@ BROUTER_PROFILE = "safety"  # Freizeitradeln, meidet Bundesstraßen/Hauptstraße
 # km/h Durchschnitt für Zeitschätzung (gemütliches Radeln)
 AVG_SPEED_KMH = 15.0
 
+DEST_DB_PATH = Path("/app/data/cache/destinations.db")
+
+
+async def _ensure_dest_db():
+    DEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(DEST_DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS dest_cache (
+                cache_key TEXT PRIMARY KEY,
+                data TEXT,
+                updated_at INTEGER DEFAULT (strftime('%s','now'))
+            )
+        """)
+        await db.commit()
 
 async def find_destinations(lat: float, lon: float, min_km: float, max_km: float) -> list[dict]:
     """Sucht interessante Radel-Ziele im gewünschten Entfernungsradius via Overpass."""
+    await _ensure_dest_db()
+    cache_key = f"{lat:.3f}_{lon:.3f}_{int(max_km)}"
+
+    async with aiosqlite.connect(DEST_DB_PATH) as db:
+        async with db.execute(
+            "SELECT data FROM dest_cache WHERE cache_key=? AND (strftime('%s','now') - updated_at) < 604800",
+            (cache_key,)
+        ) as cur:
+            row = await cur.fetchone()
+            if row:
+                return json.loads(row[0])
+
     min_m = min_km * 1000
     max_m = max_km * 1000
 
@@ -41,11 +75,33 @@ async def find_destinations(lat: float, lon: float, min_km: float, max_km: float
     out 50;
     """
 
+    from urllib.parse import urlencode
+    payload = urlencode({"data": query})
+    data = None
+    last_error = None
     async with httpx.AsyncClient(timeout=60) as client:
-        from urllib.parse import urlencode
-        resp = await client.post(OVERPASS_URL, content=urlencode({"data": query}), headers=OVERPASS_HEADERS)
-        resp.raise_for_status()
-        data = resp.json()
+        for url in OVERPASS_URLS:
+            try:
+                resp = await client.post(url, content=payload, headers=OVERPASS_HEADERS)
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    last_error = f"{resp.status_code} von {url}"
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                break
+            except (httpx.HTTPError, httpx.TimeoutException) as e:
+                last_error = str(e)
+                continue
+
+    if data is None:
+        async with aiosqlite.connect(DEST_DB_PATH) as db:
+            async with db.execute(
+                "SELECT data FROM dest_cache WHERE cache_key=?", (cache_key,)
+            ) as cur:
+                row = await cur.fetchone()
+                if row:
+                    return json.loads(row[0])
+        raise RuntimeError(f"Overpass nicht erreichbar: {last_error}")
 
     destinations = []
     for el in data.get("elements", []):
@@ -81,8 +137,14 @@ async def find_destinations(lat: float, lon: float, min_km: float, max_km: float
             "description": description,
         })
 
-    return destinations
+    async with aiosqlite.connect(DEST_DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO dest_cache (cache_key, data) VALUES (?,?)",
+            (cache_key, json.dumps(destinations))
+        )
+        await db.commit()
 
+    return destinations
 
 async def get_route(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> dict | None:
     """Holt Fahrradroute via BRouter (safety-Profil: meidet Bundesstraßen/Hauptstraßen ohne Radweg, hat Höhenprofil)."""

@@ -6,6 +6,24 @@
 m1server.fritz.box, m1server.local, 192.168.178.50 {
   tls internal
 
+  route /radai* {
+    root * /
+    file_server
+  }
+
+  route /caddy-root.crt {
+    header Content-Type application/x-x509-ca-cert
+    header Content-Disposition "attachment; filename=caddy-root.crt"
+    root * /data/caddy/pki/authorities/local
+    rewrite * /root.crt
+    file_server
+  }
+
+  route /siri* {
+    uri strip_prefix /siri
+    reverse_proxy 192.168.178.50:8766
+  }
+
   route /akito* {
     uri strip_prefix /akito
     reverse_proxy 192.168.178.50:8081
@@ -14,6 +32,31 @@ m1server.fritz.box, m1server.local, 192.168.178.50 {
   route /outdoor* {
     uri strip_prefix /outdoor
     reverse_proxy 192.168.178.50:8082
+  }
+
+  route /frigate* {
+    uri strip_prefix /frigate
+    reverse_proxy 192.168.178.50:8083
+  }
+
+  route /homebase* {
+    uri strip_prefix /homebase
+    reverse_proxy 192.168.178.50:8084
+  }
+
+  route /travel* {
+    uri strip_prefix /travel
+    reverse_proxy travel:8095
+  }
+
+  route /gallery* {
+    uri strip_prefix /gallery
+    reverse_proxy 192.168.178.50:8092
+  }
+
+  handle_path /maps* {
+    root * /maps
+    file_server
   }
 
   reverse_proxy app:8080
@@ -31,7 +74,39 @@ m1server.fritz.box, m1server.local, 192.168.178.50 {
     rewrite * /root.crt
     file_server
   }
+  route /akito* {
+    uri strip_prefix /akito
+    reverse_proxy 192.168.178.50:8081
+  }
+  route /outdoor* {
+    uri strip_prefix /outdoor
+    reverse_proxy 192.168.178.50:8082
+  }
+  route /frigate* {
+    uri strip_prefix /frigate
+    reverse_proxy 192.168.178.50:8083
+  }
+  route /siri* {
+    uri strip_prefix /siri
+    reverse_proxy 192.168.178.50:8766
+  }
+  route /homebase* {
+    uri strip_prefix /homebase
+    reverse_proxy 192.168.178.50:8084
+  }
+  route /travel* {
+    uri strip_prefix /travel
+    reverse_proxy travel:8095
+  }
+  route /gallery* {
+    uri strip_prefix /gallery
+    reverse_proxy 192.168.178.50:8092
+  }
+  handle_path /maps* {
+    root * /maps
+    file_server
+  }
   route {
-    redir https://{host}{uri} 308
+    reverse_proxy app:8080
   }
 }

@@ -7,7 +7,7 @@ export async function fetchTours(lat, lon, durationMin) {
 }
 
 export async function fetchPOIs(lat, lon, radiusM = 8000) {
-  const res = await fetch(`${BASE}/pois?lat=${lat}&lon=${lon}&radius_m=${radiusM}`)
+  const res = await fetch(`${BASE}/pois?lat=${lat}&lon=${lon}&radius_m=${Math.round(radiusM)}`) 
   if (!res.ok) throw new Error('POI-Abfrage fehlgeschlagen')
   return res.json()
 }

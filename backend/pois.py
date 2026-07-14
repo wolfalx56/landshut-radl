@@ -3,7 +3,11 @@ import aiosqlite
 import json
 from pathlib import Path
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
 OVERPASS_HEADERS = {
     "User-Agent": "LandshutRadl/1.0 (contact: wolfalx@gmx.de)",
     "Content-Type": "application/x-www-form-urlencoded",
@@ -73,12 +77,34 @@ async def get_pois(lat: float, lon: float, radius_m: int) -> list[dict]:
 
     query = f"[out:json][timeout:20];\n({chr(10).join(parts)});\nout body;"
 
-    async with httpx.AsyncClient(timeout=25) as client:
-        from urllib.parse import urlencode
-        resp = await client.post(OVERPASS_URL, content=urlencode({"data": query}), headers=OVERPASS_HEADERS)
-        resp.raise_for_status()
-        data = resp.json()
+    from urllib.parse import urlencode
+    payload = urlencode({"data": query})
+    data = None
+    last_error = None
+    async with httpx.AsyncClient(timeout=30) as client:
+        for url in OVERPASS_URLS:
+            try:
+                resp = await client.post(url, content=payload, headers=OVERPASS_HEADERS)
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    last_error = f"{resp.status_code} von {url}"
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                break
+            except (httpx.HTTPError, httpx.TimeoutException) as e:
+                last_error = str(e)
+                continue
 
+    if data is None:
+        # Alle Spiegel tot → versuche veralteten Cache als Rückfall
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                "SELECT data FROM poi_cache WHERE cache_key=?", (cache_key,)
+            ) as cur:
+                row = await cur.fetchone()
+                if row:
+                    return json.loads(row[0])
+        raise RuntimeError(f"Overpass nicht erreichbar: {last_error}")
     pois = []
     for el in data.get("elements", []):
         tags = el.get("tags", {})

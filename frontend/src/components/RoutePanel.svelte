@@ -62,7 +62,7 @@
   {#if tours.length > 0}
     <div class="tour-list">
       {#each tours as tour}
-        <button
+        <div
           class="tour-card"
           class:selected={previewTour === tour}
           on:click={() => { previewTour = tour; dispatch('select', tour) }}
@@ -93,7 +93,7 @@
               Los! →
             </button>
           {/if}
-        </button>
+        </div>
       {/each}
     </div>
   {/if}

@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [
     svelte(),
     VitePWA({
+      selfDestroying: true,
+      injectRegister: null,
       registerType: 'autoUpdate',
       workbox: {
         navigateFallbackDenylist: [/^\/akito/, /^\/radai/],

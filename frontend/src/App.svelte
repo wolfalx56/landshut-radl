@@ -14,8 +14,8 @@
   let loading = false
   let error = null
   let panelOpen = false
-  let showOverview = true // true = Gesamtansicht, false = Tour-Ansicht
-  let activeTour = null  // Tour im Navigations-Modus
+  let showOverview = true
+  let activeTour = null
 
   let watchId = null
   let centerOnUser = false
@@ -84,14 +84,34 @@
 
   function selectTour(tour) {
     selectedTour = tour
-    showOverview = false
   }
 
-  function startTour(tour) {
-    activeTour = tour
-    panelOpen = false
-    showOverview = false
-    centerOnUser = true  // beim Los! einmalig auf Standort zentrieren
+  async function startTour(tour) {
+    console.log('>>> startTour AUFGERUFEN', tour)
+    try {
+      const pos = userPos || LANDSHUT
+      const response = await fetch('/api/tours/recording/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tour_id: tour.id || tour.destination,
+          mode: 'bike',
+          start_lat: pos.lat,
+          start_lon: pos.lon
+        })
+      })
+
+      if (!response.ok) throw new Error('Recording start failed')
+      const data = await response.json()
+
+      activeTour = tour
+      panelOpen = false
+      showOverview = false
+      centerOnUser = true
+    } catch (error) {
+      console.error('Start error:', error)
+      alert('Tour konnte nicht gestartet werden: ' + error.message)
+    }
   }
 
   function backToOverview() {
@@ -102,7 +122,6 @@
 </script>
 
 <div class="app">
-  <!-- Karte füllt den ganzen Hintergrund -->
   <MapView
     {userPos}
     {selectedTour}
@@ -114,34 +133,12 @@
     on:centeredOnUser={() => centerOnUser = false}
   />
 
-  <!-- GPS-Hinweis wenn Standort nicht verfügbar -->
   {#if gpsBlocked && showOverview}
     <div class="gps-banner">
       📍 Kein GPS — Route startet von Landshut-Mitte
     </div>
   {/if}
 
-  <!-- Wetter-Leiste oben — ausblenden wenn Panel offen -->
-  {#if weather && !gpsBlocked && !panelOpen}
-    <WeatherBar days={weather.days} />
-  {/if}
-
-  <!-- Aktive Tour: Info-Leiste + Zurück-Button -->
-  {#if activeTour}
-    <div class="tour-bar">
-      <button class="btn-back-inline" on:click={backToOverview}>←</button>
-      <div class="tour-bar-info">
-        <span class="tour-bar-dest">{activeTour.destination}</span>
-        <span class="tour-bar-meta">{activeTour.distance_km} km · ~{activeTour.duration_min} min</span>
-      </div>
-    </div>
-  {:else if !showOverview}
-    <button class="btn-back" on:click={backToOverview}>
-      ← Übersicht
-    </button>
-  {/if}
-
-  <!-- Floating Action Button: Tour generieren -->
   {#if showOverview && !panelOpen}
     <div class="fab-area">
       <button class="fab" on:click={() => (panelOpen = true)}>
@@ -150,7 +147,6 @@
     </div>
   {/if}
 
-  <!-- Panel: Dauer wählen + Ergebnisse -->
   {#if panelOpen}
     <RoutePanel
       {tours}
@@ -162,85 +158,48 @@
       on:close={() => { panelOpen = false; tours = []; selectedTour = null }}
     />
   {/if}
+
+  {#if activeTour}
+    <div class="recording-panel">
+      <span class="rec-dot">🔴</span>
+      <span class="rec-text">{activeTour.destination}</span>
+      <button class="stop-btn" on:click={() => { activeTour = null; panelOpen = true; showOverview = true }}>
+        Beenden
+      </button>
+    </div>
+  {/if}
 </div>
 
 <style>
   .app {
-    position: relative;
     width: 100%;
-    height: 100vh;
-    height: 100dvh; /* iOS 15.4+: echter sichtbarer Bereich ohne Browser-Chrome */
-    overflow: hidden;
+    height: 100dvh;
+    position: relative;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
-  .tour-bar {
+  .gps-banner {
     position: absolute;
     top: 12px;
     left: 12px;
     right: 12px;
     z-index: 20;
-    background: white;
-    border-radius: 16px;
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
-  }
-
-  .btn-back-inline {
-    background: #f1f3f5;
-    border: none;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .tour-bar-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .tour-bar-dest {
-    font-size: 15px;
-    font-weight: 700;
-    color: #212529;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .tour-bar-meta {
+    background: rgba(255, 243, 205, 0.95);
+    border: 1px solid #ffc107;
+    border-radius: 12px;
+    padding: 10px 14px;
     font-size: 13px;
-    color: #6c757d;
-  }
-
-  .btn-back {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    z-index: 20;
-    background: white;
-    border: none;
-    border-radius: 24px;
-    padding: 10px 18px;
-    font-size: 15px;
-    font-weight: 600;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-    cursor: pointer;
+    color: #664d03;
+    text-align: center;
+    backdrop-filter: blur(8px);
   }
 
   .fab-area {
     position: absolute;
-    bottom: calc(24px + env(safe-area-inset-bottom));
+    bottom: calc(20px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
-    z-index: 20;
+    z-index: 25;
   }
 
   .fab {
@@ -260,19 +219,50 @@
     transform: scale(0.97);
   }
 
-  .gps-banner {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    right: 12px;
-    z-index: 20;
-    background: rgba(255, 243, 205, 0.95);
-    border: 1px solid #ffc107;
+  .recording-panel {
+    position: fixed;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    right: 20px;
+    z-index: 50;
+    background: #c92a2a;
+    color: white;
     border-radius: 12px;
-    padding: 10px 14px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(201, 42, 42, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .rec-dot {
+    font-size: 16px;
+    animation: pulse 1s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .rec-text {
+    font-weight: 600;
     font-size: 13px;
-    color: #664d03;
-    text-align: center;
-    backdrop-filter: blur(8px);
+    min-width: 120px;
+  }
+
+  .stop-btn {
+    background: white;
+    color: #c92a2a;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .stop-btn:active {
+    background: #f1f3f5;
   }
 </style>
