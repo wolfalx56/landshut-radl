@@ -4,7 +4,7 @@
   "sources": {
     "protomaps": {
       "type": "vector",
-      "url": "pmtiles:///maps/landshut-region-test.pmtiles",
+      "url": "pmtiles:///maps/niederbayern-heimat.pmtiles",
       "attribution": "<a href=\"https://github.com/protomaps/basemaps\" target=\"_blank\">Protomaps</a> © <a href=\"https://openstreetmap.org\" target=\"_blank\">OpenStreetMap</a>"
     }
   },
