@@ -1,5 +1,8 @@
-frontend/node_modules
-data/cache/*.db
-**/__pycache__
-**/*.pyc
 .git
+data
+frontend/node_modules
+frontend/dist
+frontend/public/maps
+*.pmtiles
+*.bak
+*.backup

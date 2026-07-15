@@ -172,7 +172,8 @@ static_path = Path(__file__).parent / "static"
 if static_path.exists():
     app.mount("/assets", StaticFiles(directory=static_path / "assets"), name="assets")
 
-    app.mount("/maps", StaticFiles(directory=static_path / "maps"), name="maps")
+    # /maps wird von Caddy direkt aus dem Host-Volume geliefert (Byte-Serving
+    # fuer PMTiles); uvicorn kann das nicht und braucht die Dateien nicht.
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         return FileResponse(static_path / "index.html")
