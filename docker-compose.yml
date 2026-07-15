@@ -7,6 +7,8 @@ services:
       - "8080"
     volumes:
       - ./data:/app/data
+      - ./frontend/public/maps:/maps
+      - /home/alex/bin/pmtiles:/usr/local/bin/pmtiles:ro
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
