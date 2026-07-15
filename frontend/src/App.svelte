@@ -24,6 +24,7 @@
   let activeRegion = 'Landshut'
   let mapView
   let gpsBlocked = false
+  let regionCovered = true   // bis die Auto-Wahl geprueft hat: kein Banner
 
   onMount(() => {
     startTracking()
@@ -134,6 +135,7 @@
     {activeTour}
     {tours}
     {centerOnUser}
+    on:coverage={(e) => (regionCovered = e.detail.covered)}
     on:locateMe={locateUser}
     on:centeredOnUser={() => centerOnUser = false}
   />
@@ -141,6 +143,15 @@
   {#if gpsBlocked && showOverview}
     <div class="gps-banner">
       📍 Kein GPS — Route startet von Landshut-Mitte
+    </div>
+  {/if}
+
+  {#if !regionCovered && !gpsBlocked && showOverview && !regionPanelOpen}
+    <div class="region-banner">
+      <span>📍 Keine Karte für deinen Standort</span>
+      <button class="region-banner-btn" on:click={() => (regionPanelOpen = true)}>
+        Region laden
+      </button>
     </div>
   {/if}
 
@@ -201,6 +212,17 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
+  .region-banner {
+    position: absolute; top: 12px; left: 12px; right: 12px;
+    background: #fff4e0; border: 1px solid #ffd591; border-radius: 10px;
+    padding: 10px 12px; font-size: 14px; z-index: 16;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  .region-banner-btn {
+    background: #2d5a3d; color: #fff; border: none; border-radius: 8px;
+    padding: 7px 12px; font-size: 14px; cursor: pointer; white-space: nowrap;
+  }
   .gps-banner {
     position: absolute;
     top: 12px;
