@@ -22,10 +22,46 @@ import * as pmtiles from 'pmtiles'
   // nichts wird gemalt) -> sauberer Neustart ist zuverlaessiger.
   export async function switchRegion(region) {
     if (!region) return
-    localStorage.setItem('activeRegion', JSON.stringify({
-      file: region.file, lat: region.lat, lon: region.lon, is_home: !!region.is_home,
-    }))
+    // Manuelle Wahl hat Vorrang, sonst wirft die Auto-Wahl sie sofort zurueck.
+    sessionStorage.setItem('regionManual', '1')
+    saveRegion(region)
     location.reload()
+  }
+
+  function saveRegion(region) {
+    localStorage.setItem('activeRegion', JSON.stringify({
+      name: region.name, file: region.file, lat: region.lat, lon: region.lon,
+      bbox: region.bbox, is_home: !!region.is_home,
+    }))
+  }
+
+  function posInRegion(pos, r) {
+    if (!pos || !r || !r.bbox) return false
+    const [w, s, e, n] = r.bbox
+    return pos.lon >= w && pos.lon <= e && pos.lat >= s && pos.lat <= n
+  }
+
+  // Beim Start: passt eine andere geladene Region besser zum Standort als die
+  // aktive? Dann merken + neu laden (Karte muss mit der Datei gebaut werden).
+  let autoChecked = false
+  async function autoPickRegion(pos) {
+    if (autoChecked || !pos) return
+    autoChecked = true
+    if (sessionStorage.getItem('regionManual') === '1') return
+    try {
+      const { regions } = await fetch('/api/regions').then(r => r.json())
+      const match = regions.find(r => posInRegion(pos, r))
+      dispatch('coverage', { covered: !!match })
+      if (!match) return
+      let current = null
+      try { current = JSON.parse(localStorage.getItem('activeRegion') || 'null') } catch (e) {}
+      if (current && current.file === match.file) return
+      saveRegion(match)
+      fetch(`/api/regions/${encodeURIComponent(match.name)}/touch`, { method: 'POST' })
+      location.reload()
+    } catch (e) {
+      console.error('Auto-Regionswahl fehlgeschlagen', e)
+    }
   }
 
   let mapContainer
@@ -69,7 +105,6 @@ import * as pmtiles from 'pmtiles'
         zoom: saved && saved.is_home === false ? 12 : 11,
       })
 
-      window.__map = map  // DEBUG
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
       map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right')
 
@@ -84,12 +119,7 @@ import * as pmtiles from 'pmtiles'
         const msg = err.message || String(err)
         const url = err.url || (e && e.source && e.source.url) || (e && e.sourceId) || 'keine URL'
         const status = err.status || (err.response && err.response.status) || ''
-        const box = document.getElementById('debugbox')
-        if (box) {
-          box.style.display = 'block'
-          box.textContent = 'ERROR: ' + msg + ' | STATUS: ' + status + ' | URL: ' + url + '\n' + (box.textContent || '')
-        }
-        console.error('MAP ERROR:', e)
+        console.error('MAP ERROR:', msg, '| STATUS:', status, '| URL:', url, e)
       })
       setTimeout(() => map.resize(), 300)
       window.addEventListener('resize', () => map.resize())
@@ -188,6 +218,7 @@ import * as pmtiles from 'pmtiles'
   $: if (map && selectedTour) showRoute(selectedTour)
   $: if (map && !selectedTour) clearRoute()
   $: if (map && userPos) updateUserMarker(userPos)
+  $: if (map && userPos) autoPickRegion(userPos)
   // POIs nur bei aktiver Tour (nach "Los!")
   $: if (map && activeTour) loadPOIsForTour(activeTour)
   $: if (map && !activeTour) clearPOIs()
@@ -260,7 +291,6 @@ import * as pmtiles from 'pmtiles'
 </script>
 
 <div bind:this={mapContainer} class="map"></div>
-<div id="debugbox" style="display:none; position:fixed; top:60px; left:8px; right:8px; z-index:9999; background:rgba(0,0,0,0.85); color:#0f0; font:11px monospace; padding:8px; max-height:40vh; overflow:auto; white-space:pre-wrap; border-radius:8px;"></div>
 
 <!-- GPS-Button -->
 <button class="btn-gps" on:click={() => dispatch('locateMe')} title="Mein Standort">
