@@ -26,10 +26,10 @@ app.add_middleware(
 active_recordings = {}
 
 @app.get("/api/tours")
-async def tours(lat: float, lon: float, duration_min: int = 60):
-    """Generiert 3 Tour-Optionen basierend auf Standort und gewünschter Dauer."""
+async def tours(lat: float, lon: float, duration_min: int = 60, mode: str = "bike"):
+    """Generiert 3 Tour-Optionen. mode: bike (Rad) oder hike (Wandern)."""
     try:
-        options = await generate_tour_options(lat, lon, duration_min)
+        options = await generate_tour_options(lat, lon, duration_min, mode)
         return {"tours": options}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

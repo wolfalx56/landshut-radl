@@ -1,7 +1,7 @@
 const BASE = '/api'
 
-export async function fetchTours(lat, lon, durationMin) {
-  const res = await fetch(`${BASE}/tours?lat=${lat}&lon=${lon}&duration_min=${durationMin}`)
+export async function fetchTours(lat, lon, durationMin, mode = 'bike') {
+  const res = await fetch(`${BASE}/tours?lat=${lat}&lon=${lon}&duration_min=${durationMin}&mode=${mode}`)
   if (!res.ok) throw new Error('Tour-Generierung fehlgeschlagen')
   return res.json()
 }

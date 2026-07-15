@@ -8,20 +8,37 @@
 
   const dispatch = createEventDispatcher()
 
-  const DURATIONS = [
-    { label: '30 min', value: 30, emoji: '⚡' },
-    { label: '1 Stunde', value: 60, emoji: '🌿' },
-    { label: '2 Stunden', value: 120, emoji: '🌄' },
-    { label: '3+ Stunden', value: 200, emoji: '🏔️' },
-  ]
+  const DURATIONS_BY_MODE = {
+    bike: [
+      { label: '30 min', value: 30, emoji: '⚡' },
+      { label: '1 Stunde', value: 60, emoji: '🌿' },
+      { label: '2 Stunden', value: 120, emoji: '🌄' },
+      { label: '3+ Stunden', value: 200, emoji: '🏔️' },
+    ],
+    hike: [
+      { label: '2 Stunden', value: 120, emoji: '🌿' },
+      { label: '4 Stunden', value: 240, emoji: '🌄' },
+      { label: '6 Stunden', value: 360, emoji: '🏔️' },
+    ],
+  }
 
+  let mode = 'bike'
   let selectedDuration = null
   let previewTour = null
+
+  $: DURATIONS = DURATIONS_BY_MODE[mode]
+
+  function setMode(m) {
+    if (m === mode) return
+    mode = m
+    selectedDuration = null   // Dauer-Sets unterscheiden sich
+    previewTour = null
+  }
 
   function generate(duration) {
     selectedDuration = duration
     previewTour = null
-    dispatch('generate', duration)
+    dispatch('generate', { duration, mode })
   }
 </script>
 
@@ -29,6 +46,16 @@
   <div class="panel-header">
     <span class="panel-title">Tour planen</span>
     <button class="close-btn" on:click={() => dispatch('close')}>✕</button>
+  </div>
+
+  <!-- Modus wählen -->
+  <div class="mode-switch">
+    <button class="mode-btn" class:active={mode === 'bike'} on:click={() => setMode('bike')}>
+      🚴 Rad
+    </button>
+    <button class="mode-btn" class:active={mode === 'hike'} on:click={() => setMode('hike')}>
+      🥾 Wandern
+    </button>
   </div>
 
   <!-- Dauer wählen -->
@@ -100,6 +127,18 @@
 </div>
 
 <style>
+  .mode-switch {
+    display: flex; gap: 6px; margin-bottom: 12px;
+    background: #f0f0f0; padding: 4px; border-radius: 12px;
+  }
+  .mode-btn {
+    flex: 1; padding: 9px; border: none; border-radius: 9px;
+    background: transparent; font-size: 15px; cursor: pointer; color: #666;
+  }
+  .mode-btn.active {
+    background: #fff; color: #2d5a3d; font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
   .panel {
     position: absolute;
     bottom: 0;

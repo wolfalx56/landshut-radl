@@ -70,7 +70,7 @@
     } catch {}
   }
 
-  async function generateTours(durationMin) {
+  async function generateTours(durationMin, mode = 'bike') {
     const pos = userPos || LANDSHUT
     loading = true
     error = null
@@ -78,7 +78,7 @@
     selectedTour = null
     panelOpen = true
     try {
-      const data = await fetchTours(pos.lat, pos.lon, durationMin)
+      const data = await fetchTours(pos.lat, pos.lon, durationMin, mode)
       tours = data.tours
     } catch (e) {
       error = e.message
@@ -100,7 +100,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tour_id: tour.id || tour.destination,
-          mode: 'bike',
+          mode: tour.mode || 'bike',
           start_lat: pos.lat,
           start_lon: pos.lon
         })
@@ -180,7 +180,7 @@
       {tours}
       {loading}
       {error}
-      on:generate={(e) => generateTours(e.detail)}
+      on:generate={(e) => generateTours(e.detail.duration, e.detail.mode)}
       on:select={(e) => selectTour(e.detail)}
       on:start={(e) => startTour(e.detail)}
       on:close={() => { panelOpen = false; tours = []; selectedTour = null }}

@@ -26,6 +26,12 @@ OVERPASS_HEADERS = {
 BROUTER_URL = "https://brouter.de/brouter"
 BROUTER_PROFILE = "safety"  # Freizeitradeln, meidet Bundesstraßen/Hauptstraßen ohne Radweg sehr aggressiv
 
+# Modus-abhaengige Einstellungen: Profil, Schnitt-Tempo, max. Zielentfernung
+MODES = {
+    "bike":  {"profile": "safety",      "speed_kmh": 15.0, "max_dest_km": 40.0},
+    "hike":  {"profile": "hiking-beta", "speed_kmh": 4.0,  "max_dest_km": 15.0},
+}
+
 # km/h Durchschnitt für Zeitschätzung (gemütliches Radeln)
 AVG_SPEED_KMH = 15.0
 
@@ -146,11 +152,13 @@ async def find_destinations(lat: float, lon: float, min_km: float, max_km: float
 
     return destinations
 
-async def get_route(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> dict | None:
-    """Holt Fahrradroute via BRouter (safety-Profil: meidet Bundesstraßen/Hauptstraßen ohne Radweg, hat Höhenprofil)."""
+async def get_route(from_lat: float, from_lon: float, to_lat: float, to_lon: float,
+                    mode: str = "bike") -> dict | None:
+    """Holt Route via BRouter. mode=bike -> safety-Profil, mode=hike -> hiking-beta."""
+    cfg = MODES.get(mode, MODES["bike"])
     params = {
         "lonlats": f"{from_lon},{from_lat}|{to_lon},{to_lat}|{from_lon},{from_lat}",
-        "profile": BROUTER_PROFILE,
+        "profile": cfg["profile"],
         "alternativeidx": "1",
         "format": "geojson",
     }
@@ -179,7 +187,7 @@ async def get_route(from_lat: float, from_lon: float, to_lat: float, to_lon: flo
 
     distance_km = distance_m / 1000
     # BRouter-Zeit ist optimistisch — eigene Schätzung als Untergrenze
-    duration_min = max(int(time_s / 60), int(distance_km / AVG_SPEED_KMH * 60))
+    duration_min = max(int(time_s / 60), int(distance_km / cfg["speed_kmh"] * 60))
 
     return {
         "geometry": feature["geometry"],  # enthält Höhendaten als 3. Koordinate
@@ -188,18 +196,21 @@ async def get_route(from_lat: float, from_lon: float, to_lat: float, to_lon: flo
     }
 
 
-async def generate_tour_options(lat: float, lon: float, duration_min: int) -> list[dict]:
+async def generate_tour_options(lat: float, lon: float, duration_min: int,
+                                mode: str = "bike") -> list[dict]:
     """
     Generiert 3 Tour-Optionen mit unterschiedlichen Zielen.
-    Ziel-Distanz wird aus der gewünschten Dauer berechnet.
+    Ziel-Distanz wird aus der gewünschten Dauer und dem Modus berechnet.
     """
+    cfg = MODES.get(mode, MODES["bike"])
+
     # Ziel-Distanz (Hinweg = halbe Gesamtdistanz)
-    total_km = (duration_min / 60) * AVG_SPEED_KMH
+    total_km = (duration_min / 60) * cfg["speed_kmh"]
     half_km = total_km / 2
 
     # Suchradius: ±40% um die Halbstrecke
-    min_km = max(2.0, half_km * 0.6)
-    max_km = min(40.0, half_km * 1.4)
+    min_km = max(1.0 if mode == "hike" else 2.0, half_km * 0.6)
+    max_km = min(cfg["max_dest_km"], half_km * 1.4)
 
     destinations = await find_destinations(lat, lon, min_km, max_km)
 
@@ -212,11 +223,12 @@ async def generate_tour_options(lat: float, lon: float, duration_min: int) -> li
 
     tours = []
     for dest in candidates:
-        route = await get_route(lat, lon, dest["lat"], dest["lon"])
+        route = await get_route(lat, lon, dest["lat"], dest["lon"], mode)
         if not route:
             continue
 
         tours.append({
+            "mode": mode,
             "destination": dest["name"],
             "destination_type": dest["type"],
             "destination_lat": dest["lat"],
