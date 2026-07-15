@@ -56,6 +56,14 @@ m1server.fritz.box, m1server.local, 192.168.178.50 {
 
   handle_path /maps* {
     root * /maps
+    # ETag/Last-Modified weg: Safari macht sonst Conditional Range-Requests,
+    # Caddy antwortet dann 304 mit leerem Body -> MapLibre bekommt keine Kacheln
+    # und die Karte bleibt weiss (Layer und Features sind da, nur kein Bild).
+    header {
+      -ETag
+      -Last-Modified
+      Cache-Control "no-store"
+    }
     file_server
   }
 
