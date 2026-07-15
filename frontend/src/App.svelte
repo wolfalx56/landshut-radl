@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import MapView from './components/MapView.svelte'
   import RoutePanel from './components/RoutePanel.svelte'
+  import RegionPanel from './components/RegionPanel.svelte'
   import WeatherBar from './components/WeatherBar.svelte'
   import { fetchTours, fetchWeather } from './lib/api.js'
 
@@ -19,6 +20,9 @@
 
   let watchId = null
   let centerOnUser = false
+  let regionPanelOpen = false
+  let activeRegion = 'Landshut'
+  let mapView
   let gpsBlocked = false
 
   onMount(() => {
@@ -123,6 +127,7 @@
 
 <div class="app">
   <MapView
+    bind:this={mapView}
     {userPos}
     {selectedTour}
     {showOverview}
@@ -139,12 +144,24 @@
     </div>
   {/if}
 
-  {#if showOverview && !panelOpen}
+  {#if showOverview && !panelOpen && !regionPanelOpen}
     <div class="fab-area">
       <button class="fab" on:click={() => (panelOpen = true)}>
         🚴 Tour planen
       </button>
     </div>
+    <button class="region-fab" on:click={() => (regionPanelOpen = true)} title="Karten-Regionen">
+      🗺️
+    </button>
+  {/if}
+
+  {#if regionPanelOpen}
+    <RegionPanel
+      {userPos}
+      {activeRegion}
+      on:select={(e) => { activeRegion = e.detail.name; mapView?.switchRegion(e.detail); regionPanelOpen = false }}
+      on:close={() => (regionPanelOpen = false)}
+    />
   {/if}
 
   {#if panelOpen}
@@ -171,6 +188,12 @@
 </div>
 
 <style>
+  .region-fab {
+    position: absolute; right: 12px; bottom: 92px;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: #fff; border: 1px solid #ddd; font-size: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2); cursor: pointer; z-index: 15;
+  }
   .app {
     width: 100%;
     height: 100dvh;

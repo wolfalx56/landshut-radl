@@ -17,6 +17,17 @@ import * as pmtiles from 'pmtiles'
   const LANDSHUT = [12.1525, 48.5369]
   const MAP_STYLE = '/maps/protomaps-light-style.json'
 
+  // Regionswechsel: merken + Seite neu laden.
+  // setStyle() bricht in Safari das WebGL-Rendering (Kacheln laden, aber
+  // nichts wird gemalt) -> sauberer Neustart ist zuverlaessiger.
+  export async function switchRegion(region) {
+    if (!region) return
+    localStorage.setItem('activeRegion', JSON.stringify({
+      file: region.file, lat: region.lat, lon: region.lon, is_home: !!region.is_home,
+    }))
+    location.reload()
+  }
+
   let mapContainer
   let map
   let userMarker = null
@@ -32,7 +43,7 @@ import * as pmtiles from 'pmtiles'
   }
 
   onMount(() => {
-    function initMap() {
+    async function initMap() {
       if (!mapContainer || mapContainer.clientHeight === 0) {
         requestAnimationFrame(initMap)
         return
@@ -41,13 +52,24 @@ import * as pmtiles from 'pmtiles'
       const protocol = new pmtiles.Protocol()
       maplibregl.addProtocol('pmtiles', protocol.tile)
 
+      let saved = null
+      try { saved = JSON.parse(localStorage.getItem('activeRegion') || 'null') } catch (e) {}
+
+      // Style erst laden, dann Karte bauen (MapLibre kann kein Promise als style)
+      const style = await fetch(MAP_STYLE).then(r => r.json())
+      if (saved && saved.file) {
+        style.sources.protomaps.url = `pmtiles:///maps/${saved.file}`
+      }
+
       map = new maplibregl.Map({
         container: mapContainer,
-        style: MAP_STYLE,
-        center: LANDSHUT,
-        zoom: 11,
+        style: style,
+        center: saved && saved.lat != null ? [saved.lon, saved.lat]
+              : (userPos ? [userPos.lon, userPos.lat] : LANDSHUT),
+        zoom: saved && saved.is_home === false ? 12 : 11,
       })
 
+      window.__map = map  // DEBUG
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
       map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right')
 
@@ -191,7 +213,8 @@ import * as pmtiles from 'pmtiles'
     if (map.getSource('route')) {
       map.getSource('route').setData(emptyGeoJSON())
     }
-    map.flyTo({ center: userPos ? [userPos.lon, userPos.lat] : LANDSHUT, zoom: 11 })
+    // Kein flyTo hier: das Statement feuert auch beim Start (selectedTour ist
+    // dann null) und wuerde die Karte aus der gewaehlten Region rauswerfen.
   }
 
   function updateUserMarker(pos) {
