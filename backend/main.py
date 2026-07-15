@@ -10,6 +10,8 @@ from uuid import uuid4
 from routing import generate_tour_options
 from pois import get_pois
 from weather import get_weather
+from regions import (list_regions, evict_candidate, delete_region,
+                     touch_region, start_extract, job_status, MAX_REGIONS)
 
 app = FastAPI()
 
@@ -110,6 +112,61 @@ async def stop_recording(body: dict = Body(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Region-Downloader ---------------------------------------------------
+
+@app.get("/api/regions")
+async def regions_list():
+    """Alle Regionen mit Groesse, last_used, is_home."""
+    try:
+        return {"regions": list_regions(), "max_regions": MAX_REGIONS}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/regions")
+async def regions_create(payload: dict = Body(...)):
+    """Startet Extract. Bei vollem Speicher: needs_confirm + Loeschkandidat."""
+    try:
+        name = (payload.get("name") or "").strip()
+        lat, lon = payload.get("lat"), payload.get("lon")
+        if not name:
+            raise HTTPException(status_code=400, detail="name fehlt")
+        if lat is None or lon is None:
+            raise HTTPException(status_code=400, detail="lat/lon fehlen")
+
+        confirm = payload.get("confirm_evict")
+        candidate = evict_candidate()
+        if candidate and not confirm:
+            return {"needs_confirm": True, "evict_candidate": candidate}
+        if candidate and confirm:
+            delete_region(candidate["name"])
+
+        job_id = start_extract(name, float(lat), float(lon))
+        return {"job_id": job_id, "status": "running"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/regions/status/{job_id}")
+async def regions_status(job_id: str):
+    job = job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job unbekannt")
+    return job
+
+@app.post("/api/regions/{name}/touch")
+async def regions_touch(name: str):
+    if not touch_region(name):
+        raise HTTPException(status_code=404, detail="Region unbekannt")
+    return {"ok": True}
+
+@app.delete("/api/regions/{name}")
+async def regions_delete(name: str):
+    if not delete_region(name):
+        raise HTTPException(status_code=404, detail="Region unbekannt oder geschuetzt")
+    return {"ok": True}
 
 static_path = Path(__file__).parent / "static"
 if static_path.exists():
